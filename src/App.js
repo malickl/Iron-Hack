@@ -124,11 +124,21 @@ const App = () => {
   const [editingProgram, setEditingProgram] = useState(null);
   const [selectedStatEx, setSelectedStatEx] = useState("");
   const [statTimeFilter, setStatTimeFilter] = useState(30);
+  const [filterRange, setFilterRange] = useState(30);
   const [expandedHistory, setExpandedHistory] = useState(null);
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [timer, setTimer] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [globalTime, setGlobalTime] = useState(0);
+
+  const filteredDashboardHistory = useMemo(() => {
+    return data.history.filter((h) => {
+      if (filterRange === 999) return true;
+      const dateLimit = new Date();
+      dateLimit.setDate(dateLimit.getDate() - filterRange);
+      return new Date(h.date) >= dateLimit;
+    });
+  }, [data.history, filterRange]);
 
   useEffect(() => {
     if (activeTab === "live" && currentWorkout) {
@@ -180,6 +190,7 @@ const App = () => {
 
   const saveToCloud = async (newData) => {
     if (!user) return;
+    setData(newData); // Optimistic UI update
     await setDoc(doc(db, "users", user.uid), newData);
   };
 
@@ -267,6 +278,7 @@ const App = () => {
       name: currentWorkout.name,
       date: new Date().toISOString(),
       duration,
+      hasVisualTimer: true,
       totalVolume,
       exercises: validExercises,
     };
@@ -395,49 +407,73 @@ const App = () => {
             </button>
           )}
 
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-2xl">
-              <span className="text-xl font-bold text-white block">
-                {data.history.length}
+          <div className="flex gap-2 bg-zinc-900 p-1.5 rounded-2xl border border-zinc-800 shadow-lg mb-4">
+            {[7, 30, 999].map((val) => (
+              <button
+                key={val}
+                onClick={() => setFilterRange(val)}
+                className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                  filterRange === val
+                    ? "bg-zinc-800 text-white shadow-md border border-zinc-700"
+                    : "text-zinc-600 hover:text-zinc-400"
+                }`}
+              >
+                {val === 999 ? "Global" : val + "j"}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-center mb-6">
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-3xl shadow-xl flex flex-col justify-center">
+              <span className="text-2xl font-black text-orange-500 block mb-1">
+                {filteredDashboardHistory.length}
               </span>
-              <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest">
+              <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest leading-tight">
                 Séances
               </span>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-2xl">
-              <span className="text-xl font-bold text-white block">
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-3xl shadow-xl flex flex-col justify-center">
+              <span className="text-2xl font-black text-orange-500 block mb-1">
                 {(
-                  data.history.reduce((a, b) => a + (b.totalVolume || 0), 0) /
+                  filteredDashboardHistory.reduce((a, b) => a + (b.totalVolume || 0), 0) /
                   1000
                 ).toFixed(1)}
               </span>
-              <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest">
-                Vol (t)
+              <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest leading-tight">
+                Tonnage (t)
               </span>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-2xl">
-              <span className="text-xl font-bold text-white block">
-                {Object.keys(data.records).length}
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-3xl shadow-xl flex flex-col justify-center">
+              <span className="text-2xl font-black text-orange-500 block mb-1">
+                {(() => {
+                  const totalMin = filteredDashboardHistory.reduce((a, b) => {
+                    if (!b.hasVisualTimer) return a;
+                    return a + (typeof b.duration === 'number' && !isNaN(b.duration) ? b.duration : 0);
+                  }, 0);
+                  const h = Math.floor(totalMin / 60);
+                  const m = totalMin % 60;
+                  return h > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${m}m`;
+                })()}
               </span>
-              <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest">
-                PRs
+              <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest leading-tight">
+                Tps Total
               </span>
             </div>
           </div>
+
           <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-3xl h-64 shadow-2xl">
             <h3 className="text-[10px] font-black text-zinc-500 mb-4 flex items-center gap-2 uppercase tracking-[0.2em]">
-              <TrendingUp size={14} /> Volume Global
+              <TrendingUp size={14} /> Volume Global (LineChart)
             </h3>
-            <StableBarChart
-              data={[...data.history]
+            <StableLineChart
+              data={[...filteredDashboardHistory]
                 .reverse()
-                .slice(-7)
                 .map((h) => ({
                   date: new Date(h.date).toLocaleDateString("fr-FR", {
                     day: "2-digit",
                     month: "2-digit",
                   }),
-                  volume: h.totalVolume,
+                  poids: h.totalVolume,
                 }))}
             />
           </div>
