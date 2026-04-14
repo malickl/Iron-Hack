@@ -128,6 +128,33 @@ const App = () => {
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [timer, setTimer] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const [globalTime, setGlobalTime] = useState(0);
+
+  useEffect(() => {
+    if (activeTab === "live" && currentWorkout) {
+      localStorage.setItem("iron_track_ongoing_workout", JSON.stringify(currentWorkout));
+    } else if (!currentWorkout) {
+      localStorage.removeItem("iron_track_ongoing_workout");
+    }
+  }, [currentWorkout, activeTab]);
+
+  useEffect(() => {
+    let interval;
+    if (activeTab === "live" && currentWorkout) {
+      interval = setInterval(() => {
+        setGlobalTime(Math.floor((Date.now() - currentWorkout.startTime) / 1000));
+      }, 1000);
+    } else {
+      setGlobalTime(0);
+    }
+    return () => clearInterval(interval);
+  }, [activeTab, currentWorkout]);
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -207,7 +234,10 @@ const App = () => {
       done: true,
     };
     setCurrentWorkout({ ...currentWorkout, exercises: newExs });
-    setTimer(parseInt(ex.rest) || 60);
+  };
+
+  const startRestTimer = (restTime) => {
+    setTimer(parseInt(restTime) || 60);
     setIsTimerActive(true);
   };
 
@@ -349,6 +379,22 @@ const App = () => {
             </h1>
             <Trophy className="text-orange-400 w-8 h-8 bg-zinc-800 p-1.5 rounded-full" />
           </header>
+          
+          {localStorage.getItem("iron_track_ongoing_workout") && (
+            <button
+              onClick={() => {
+                const saved = localStorage.getItem("iron_track_ongoing_workout");
+                if (saved) {
+                  setCurrentWorkout(JSON.parse(saved));
+                  setActiveTab("live");
+                }
+              }}
+              className="w-full bg-orange-500/20 border border-orange-500 text-orange-500 py-4 rounded-3xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 mb-4 animate-pulse shadow-xl shadow-orange-950/20"
+            >
+              <Clock size={16} /> Reprendre la séance en cours
+            </button>
+          )}
+
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-2xl">
               <span className="text-xl font-bold text-white block">
@@ -454,7 +500,7 @@ const App = () => {
           <div className="flex justify-between items-center sticky top-14 bg-black/95 backdrop-blur-md py-4 z-30 border-b border-zinc-900">
             <button
               onClick={() => {
-                if (window.confirm("Abandonner ?")) {
+                if (window.confirm("Abandonner la séance en cours ? (Cela ne sera pas sauvegardé)")) {
                   setCurrentWorkout(null);
                   setActiveTab("dashboard");
                 }
@@ -467,8 +513,11 @@ const App = () => {
               <h2 className="text-white font-black uppercase tracking-widest text-sm">
                 {currentWorkout.name}
               </h2>
+              <div className="text-zinc-400 font-mono text-xs tracking-widest mt-1">
+                {formatTime(globalTime)}
+              </div>
               {isTimerActive && (
-                <div className="text-orange-500 font-mono text-2xl font-black mt-1">
+                <div className="text-orange-500 font-mono text-2xl font-black mt-1 animate-pulse">
                   REPOS: {timer}s
                 </div>
               )}
@@ -549,6 +598,14 @@ const App = () => {
                         fill={set.done ? "currentColor" : "none"}
                       />
                     </button>
+                    {set.done && (
+                      <button
+                        onClick={() => startRestTimer(ex.rest)}
+                        className="p-2 bg-zinc-800 rounded-xl text-orange-500 flex items-center gap-1 active:scale-95 transition-transform"
+                      >
+                        <Clock size={16} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
